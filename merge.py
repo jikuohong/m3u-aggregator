@@ -261,4 +261,4 @@ def cctv():
 generate_all_playlists()
 
 # 启动 Flask
-app.run(host="0.0.0.0", port=3566)
+app.run(host="0.0.0.0", port=50087)
