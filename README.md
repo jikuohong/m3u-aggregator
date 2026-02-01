@@ -205,9 +205,11 @@ services:
 docker compose up -d
 
 
-启动后访问：
+Full 订阅 → http://<HOST_IP>:3566/full.m3u
 
-http://IP:50087/iptv.m3u
+Lite 订阅 → http://<HOST_IP>:3566/lite.m3u
+
+CCTV+卫视 → http://<HOST_IP>:3566/cctv.m3u
 
 📦 订阅源配置
 
