@@ -165,8 +165,11 @@ CCTV 固定顺序
 
 🌐 订阅输出
 📡 HTTP 订阅地址
-http://服务器IP:50087/iptv.m3u
+Full 订阅 → http://<HOST_IP>:50087/full.m3u
 
+Lite 订阅 → http://<HOST_IP>:50087/lite.m3u
+
+CCTV+卫视 → http://<HOST_IP>:50087/cctv.m3u
 
 ✔ 支持：
 
@@ -205,11 +208,6 @@ services:
 docker compose up -d
 
 
-Full 订阅 → http://<HOST_IP>:3566/full.m3u
-
-Lite 订阅 → http://<HOST_IP>:3566/lite.m3u
-
-CCTV+卫视 → http://<HOST_IP>:3566/cctv.m3u
 
 📦 订阅源配置
 
