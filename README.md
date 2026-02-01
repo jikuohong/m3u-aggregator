@@ -155,16 +155,11 @@ CCTV 固定顺序
 
 ⏰ 自动更新机制
 
-启动即生成一次 iptv.m3u
-
-每日凌晨 2 点自动更新
-
-更新过程 无需重启容器
-
-订阅地址始终不变
+暂无
 
 🌐 订阅输出
 📡 HTTP 订阅地址
+
 Full 订阅 → http://<HOST_IP>:50087/full.m3u
 
 Lite 订阅 → http://<HOST_IP>:50087/lite.m3u
