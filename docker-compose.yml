@@ -1,0 +1,10 @@
+services:
+  m3u-flask:
+    build: .
+    container_name: m3u-flask
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./merge.py:/iptv/merge.py
+      - ./config:/iptv/config
+      - ./output:/iptv/output
