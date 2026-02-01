@@ -222,14 +222,6 @@ HTTP / HTTPS
 
 M3U / TXT
 
-注释 #
-
-示例：
-
-https://live.zbds.top/tv/iptv4.m3u
-https://raw.githubusercontent.com/Guovin/iptv-api/gd/output/result.m3u
-http://192.168.1.1:3566/
-
 🧠 适合人群
 
 想要 长期可用 IPTV 订阅
