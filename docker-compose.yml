@@ -1,10 +1,12 @@
+version: "3.9"
+
 services:
   m3u-flask:
     build: .
     container_name: m3u-flask
-    network_mode: host
+    network_mode: host       # 使用宿主机网络，保证 IPTV 源访问
     restart: unless-stopped
     volumes:
+      - ./config:/iptv/config    # 挂载 m3u-sources.txt
+      - ./output:/iptv/output    # 挂载输出目录
       - ./merge.py:/iptv/merge.py
-      - ./config:/iptv/config
-      - ./output:/iptv/output
