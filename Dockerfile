@@ -15,7 +15,7 @@ COPY merge.py ./merge.py
 RUN mkdir -p ./output
 
 # 暴露端口
-EXPOSE 3566
+EXPOSE 50087
 
 # 启动 Flask
 CMD ["python", "merge.py"]
