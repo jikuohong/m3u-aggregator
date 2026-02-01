@@ -63,6 +63,7 @@ GROUP_ORDER = {
     "中国大陆 | 新闻": 4,
     "中国大陆 | 影视": 5,
     "中国大陆 | 综艺": 6,
+    "中国大陆 | 其他": 99,
 
     "中国香港 | 综合": 10,
     "中国香港 | 新闻": 11,
@@ -81,9 +82,7 @@ GROUP_ORDER = {
     "国际频道 | 影视": 32,
     "国际频道 | 体育": 33,
     "国际频道 | 音乐": 34,
-    "国际频道 | 游戏": 35,
-
-    "中国大陆 | 其他": 99
+    "国际频道 | 游戏": 35
 }
 
 # =========================
@@ -91,7 +90,6 @@ GROUP_ORDER = {
 # =========================
 def detect_group(region, name):
     up = name.upper()
-
     if region == "中国大陆":
         if "CCTV" in up:
             if "5" in up or "体育" in name:
@@ -129,7 +127,6 @@ def detect_group(region, name):
         if "GAME" in up or "电竞" in name: return "国际频道 | 游戏"
         if any(x in up for x in ["MOVIE","FILM"]): return "国际频道 | 影视"
         return "国际频道 | 综合"
-
     return None
 
 # =========================
@@ -156,9 +153,13 @@ def build_channels():
     channels = {}
     with open(SRC) as f:
         for line in f:
-            if not line.strip() or line.startswith("#"):
+            line = line.strip()
+            if not line or line.startswith("#"):
                 continue
-            url, region = line.strip().split(maxsplit=1)
+            try:
+                url, region = line.split(maxsplit=1)
+            except ValueError:
+                continue
 
             if fail_db.get(url, 0) >= FAIL_LIMIT:
                 continue
@@ -177,7 +178,6 @@ def build_channels():
                     continue
                 key = (group, name)
                 channels.setdefault(key, set()).add(link)
-
     save_db(fail_db)
     return channels
 
@@ -189,17 +189,17 @@ def output_playlist(name, filter_fn):
     items = [(k, v) for k, v in channels.items() if filter_fn(k)]
 
     def sort_key(item):
-        (group, name), _ = item
-        if group == "中国大陆 | 央视" and name in CCTV_ORDER:
-            return (GROUP_ORDER[group], CCTV_ORDER.index(name))
-        return (GROUP_ORDER.get(group, 50), name)
+        (group, cname), _ = item
+        if group == "中国大陆 | 央视" and cname in CCTV_ORDER:
+            return (GROUP_ORDER[group], CCTV_ORDER.index(cname))
+        return (GROUP_ORDER.get(group, 50), cname)
 
     items.sort(key=sort_key)
 
-    m3u = f"{OUT_DIR}/{name}.m3u"
-    txt = f"{OUT_DIR}/{name}.txt"
+    m3u_file = f"{OUT_DIR}/{name}.m3u"
+    txt_file = f"{OUT_DIR}/{name}.txt"
 
-    with open(m3u, "w") as fm, open(txt, "w") as ft:
+    with open(m3u_file, "w") as fm, open(txt_file, "w") as ft:
         fm.write("#EXTM3U\n")
         for (group, cname), urls in items:
             for u in urls:
@@ -209,42 +209,56 @@ def output_playlist(name, filter_fn):
 # =========================
 # 三种订阅
 # =========================
-output_playlist(
-    "iptv_full",
-    lambda k: True
-)
-
-output_playlist(
-    "iptv_lite",
-    lambda k: k[0] in (
-        "中国大陆 | 央视",
-        "中国大陆 | 卫视",
-        "中国香港 | 综合",
-        "中国台湾 | 综合"
+def generate_all_playlists():
+    output_playlist(
+        "iptv_full",
+        lambda k: True
     )
-)
 
-output_playlist(
-    "iptv_cctv_ws",
-    lambda k: k[0] in (
-        "中国大陆 | 央视",
-        "中国大陆 | 卫视"
+    output_playlist(
+        "iptv_lite",
+        lambda k: k[0] in (
+            "中国大陆 | 央视",
+            "中国大陆 | 卫视",
+            "中国香港 | 综合",
+            "中国台湾 | 综合"
+        )
     )
-)
+
+    output_playlist(
+        "iptv_cctv_ws",
+        lambda k: k[0] in (
+            "中国大陆 | 央视",
+            "中国大陆 | 卫视"
+        )
+    )
 
 # =========================
-# Flask
+# Flask 服务
 # =========================
 @app.route("/full.m3u")
 def full():
-    return Response(open(f"{OUT_DIR}/iptv_full.m3u").read(), mimetype="audio/x-mpegurl")
+    path = f"{OUT_DIR}/iptv_full.m3u"
+    if not os.path.exists(path):
+        generate_all_playlists()
+    return Response(open(path).read(), mimetype="audio/x-mpegurl")
 
 @app.route("/lite.m3u")
 def lite():
-    return Response(open(f"{OUT_DIR}/iptv_lite.m3u").read(), mimetype="audio/x-mpegurl")
+    path = f"{OUT_DIR}/iptv_lite.m3u"
+    if not os.path.exists(path):
+        generate_all_playlists()
+    return Response(open(path).read(), mimetype="audio/x-mpegurl")
 
 @app.route("/cctv.m3u")
 def cctv():
-    return Response(open(f"{OUT_DIR}/iptv_cctv_ws.m3u").read(), mimetype="audio/x-mpegurl")
+    path = f"{OUT_DIR}/iptv_cctv_ws.m3u"
+    if not os.path.exists(path):
+        generate_all_playlists()
+    return Response(open(path).read(), mimetype="audio/x-mpegurl")
 
+# 首次启动生成
+generate_all_playlists()
+
+# 启动 Flask
 app.run(host="0.0.0.0", port=3566)
