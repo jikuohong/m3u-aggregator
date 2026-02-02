@@ -2,11 +2,14 @@ version: "3.9"
 
 services:
   m3u-flask:
-    build: .
     container_name: m3u-flask
-    network_mode: host       # 使用宿主机网络
+    image: python:3.11-slim
     restart: unless-stopped
+    ports:
+      - "50087:50087"
     volumes:
-      - ./config:/iptv/config
-      - ./output:/iptv/output
-      - ./merge.py:/iptv/merge.py
+      - ./config:/iptv/config     # 存放 m3u-sources.txt
+      - ./output:/iptv/output     # 存放生成的 m3u 和 txt 文件
+    working_dir: /iptv
+    command: >
+      sh -c "pip install flask requests && python merge.py"
