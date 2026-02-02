@@ -2,7 +2,9 @@
 import os
 import re
 import requests
-from flask import Flask, Response
+from flask import Flask, Response, jsonify
+
+from collections import defaultdict
 
 BASE = "/iptv"
 SRC = f"{BASE}/config/m3u-sources.txt"
@@ -10,7 +12,7 @@ OUT_DIR = f"{BASE}/output"
 FAIL_DB = f"{OUT_DIR}/fail.db"
 
 TIMEOUT = 8
-FAIL_LIMIT = 3
+FAIL_LIMIT = 5
 
 os.makedirs(OUT_DIR, exist_ok=True)
 app = Flask(__name__)
@@ -28,7 +30,19 @@ def is_geo_blocked(name, url):
     return any(k.lower() in text for k in GEO_KEYWORDS)
 
 # =========================
-# 失败源管理
+# CCTV 名称标准化
+# =========================
+def normalize_name(name: str) -> str:
+    n = name.upper().strip()
+    # 只处理 CCTV
+    if "CCTV" in n:
+        n = re.sub(r"CCTV[-\s]*0*([0-9]{1,2})", r"CCTV-\1", n)
+        if "CCTV-5" in n and "+" in name:
+            return "CCTV-5+"
+    return name
+
+# =========================
+# 失败源管理（每条 URL）
 # =========================
 def load_db():
     if not os.path.exists(FAIL_DB):
@@ -48,7 +62,7 @@ def save_db(db):
 fail_db = load_db()
 
 # =========================
-# 分组 & 排序规则
+# 排序规则
 # =========================
 CCTV_ORDER = [
     "CCTV-1","CCTV-2","CCTV-3","CCTV-4","CCTV-5","CCTV-5+",
@@ -90,21 +104,17 @@ GROUP_ORDER = {
 # =========================
 def detect_group(region, name):
     up = name.upper()
+
     if region == "中国大陆":
         if "CCTV" in up:
             if "5" in up or "体育" in name:
                 return "中国大陆 | 体育"
             return "中国大陆 | 央视"
-        if "卫视" in name:
-            return "中国大陆 | 卫视"
-        if "新闻" in name:
-            return "中国大陆 | 新闻"
-        if "体育" in name:
-            return "中国大陆 | 体育"
-        if any(x in name for x in ["电影", "影视"]):
-            return "中国大陆 | 影视"
-        if "综艺" in name:
-            return "中国大陆 | 综艺"
+        if "卫视" in name: return "中国大陆 | 卫视"
+        if "新闻" in name: return "中国大陆 | 新闻"
+        if "体育" in name: return "中国大陆 | 体育"
+        if any(x in name for x in ["电影","影视"]): return "中国大陆 | 影视"
+        if "综艺" in name: return "中国大陆 | 综艺"
         return "中国大陆 | 其他"
 
     if region == "中国香港":
@@ -147,38 +157,41 @@ def parse_m3u(text):
     return result
 
 # =========================
-# 构建频道池
+# 构建频道池（每条URL独立失败统计）
 # =========================
 def build_channels():
     channels = {}
-    with open(SRC) as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            try:
-                url, region = line.split(maxsplit=1)
-            except ValueError:
+    for line in open(SRC, encoding="utf-8"):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        try:
+            url, region = line.split(maxsplit=1)
+        except ValueError:
+            continue
+
+        try:
+            text = requests.get(url, timeout=TIMEOUT).text
+        except Exception:
+            # 整个源失败不影响其他源
+            continue
+
+        for raw_name, link in parse_m3u(text):
+            if is_geo_blocked(raw_name, link):
                 continue
 
-            if fail_db.get(url, 0) >= FAIL_LIMIT:
+            group = detect_group(region, raw_name)
+            if not group:
                 continue
 
-            try:
-                text = requests.get(url, timeout=TIMEOUT).text
-            except Exception:
-                fail_db[url] = fail_db.get(url, 0) + 1
-                continue
+            name = normalize_name(raw_name)
+            key = (group, name)
+            channels.setdefault(key, {})
 
-            for name, link in parse_m3u(text):
-                if is_geo_blocked(name, link):
-                    continue
-                group = detect_group(region, name)
-                if not group:
-                    continue
-                key = (group, name)
-                channels.setdefault(key, set()).add(link)
-    save_db(fail_db)
+            # 失败计数下沉到单条 URL
+            if fail_db.get(link, 0) < FAIL_LIMIT:
+                channels[key][link] = fail_db.get(link, 0)
+
     return channels
 
 # =========================
@@ -199,22 +212,18 @@ def output_playlist(name, filter_fn):
     m3u_file = f"{OUT_DIR}/{name}.m3u"
     txt_file = f"{OUT_DIR}/{name}.txt"
 
-    with open(m3u_file, "w") as fm, open(txt_file, "w") as ft:
+    with open(m3u_file, "w", encoding="utf-8") as fm, open(txt_file, "w", encoding="utf-8") as ft:
         fm.write("#EXTM3U\n")
-        for (group, cname), urls in items:
-            for u in urls:
+        for (group, cname), urls_dict in items:
+            for u in urls_dict:
                 fm.write(f'#EXTINF:-1 group-title="{group}",{cname}\n{u}\n')
                 ft.write(f"{cname},{u}\n")
 
 # =========================
 # 三种订阅
 # =========================
-def generate_all_playlists():
-    output_playlist(
-        "iptv_full",
-        lambda k: True
-    )
-
+def generate_all():
+    output_playlist("iptv_full", lambda k: True)
     output_playlist(
         "iptv_lite",
         lambda k: k[0] in (
@@ -224,7 +233,6 @@ def generate_all_playlists():
             "中国台湾 | 综合"
         )
     )
-
     output_playlist(
         "iptv_cctv_ws",
         lambda k: k[0] in (
@@ -234,31 +242,49 @@ def generate_all_playlists():
     )
 
 # =========================
-# Flask 服务
+# 状态接口
+# =========================
+@app.route("/status")
+def status():
+    channels = build_channels()
+    stats = {f"{g} - {n}": len(urls) for (g, n), urls in channels.items()}
+    return jsonify(stats)
+
+@app.route("/rebuild")
+def rebuild():
+    generate_all()
+    return "Rebuild complete"
+
+# =========================
+# 三种订阅接口
 # =========================
 @app.route("/full.m3u")
 def full():
     path = f"{OUT_DIR}/iptv_full.m3u"
     if not os.path.exists(path):
-        generate_all_playlists()
-    return Response(open(path).read(), mimetype="audio/x-mpegurl")
+        generate_all()
+    return Response(open(path, encoding="utf-8").read(), mimetype="audio/x-mpegurl")
 
 @app.route("/lite.m3u")
 def lite():
     path = f"{OUT_DIR}/iptv_lite.m3u"
     if not os.path.exists(path):
-        generate_all_playlists()
-    return Response(open(path).read(), mimetype="audio/x-mpegurl")
+        generate_all()
+    return Response(open(path, encoding="utf-8").read(), mimetype="audio/x-mpegurl")
 
 @app.route("/cctv.m3u")
 def cctv():
     path = f"{OUT_DIR}/iptv_cctv_ws.m3u"
     if not os.path.exists(path):
-        generate_all_playlists()
-    return Response(open(path).read(), mimetype="audio/x-mpegurl")
+        generate_all()
+    return Response(open(path, encoding="utf-8").read(), mimetype="audio/x-mpegurl")
 
-# 首次启动生成
-generate_all_playlists()
+# =========================
+# 首次生成
+# =========================
+generate_all()
 
+# =========================
 # 启动 Flask
+# =========================
 app.run(host="0.0.0.0", port=50087)
