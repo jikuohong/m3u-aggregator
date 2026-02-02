@@ -153,9 +153,14 @@ CCTV 固定顺序
 
 所有客户端显示一致
 
-⏰ 自动更新机制
+# 核心逻辑
+- 所有源遍历一次
+- parse_m3u 解析每条频道
+- normalize_name 对 CCTV 做标准化
+- detect_group 分类分组
+- 输出 three playlists
+- /status 显示频道和源数量
 
-暂无
 
 🌐 订阅输出
 📡 HTTP 订阅地址
@@ -200,7 +205,13 @@ services:
       - ./output:/iptv/output
 
 3️⃣ 启动服务
-docker compose up -d
+# 使用步骤
+1. 编辑 config/m3u-sources.txt
+2. 启动容器
+   docker compose up -d
+3. 访问订阅链接：
+   http://HOST:50087/full.m3u
+
 
 
 
