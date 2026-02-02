@@ -38,215 +38,138 @@ Docker 一键运行
 
 支持 IPv4 / IPv6 / 混合源
 
-支持本地源（路由器 / 局域网）
+支持本地源（路由器 / 局域网）# m3u-aggregator
 
-♻️ 同名频道自动合并
+> IPTV 聚合工具，自动抓取多个 M3U 源，分类整理频道，支持长期订阅与多种订阅模式。
 
-以 (分组 + 频道名) 为唯一键
+---
 
-同名频道只显示一次
+## 功能概览
 
-内部保留 多条播放地址（多源）
+- 从多源 M3U 订阅抓取频道
+- 自动合并同名频道（仅对 CCTV 系列进行标准化，如 CCTV1 / CCTV-1 / CCTV1高清 → CCTV-1，CCTV-5+ 保留特殊处理）
+- 自动去除不可长期订阅的频道（GEO 限制 / 广告站 / 特定关键词）
+- 支持失败源管理（连续 5 次失败自动跳过）
+- 自动分类分组：
+  - 中国大陆：央视、卫视、体育、新闻、影视、综艺、其他
+  - 中国香港：综合、新闻、影视、体育、综艺
+  - 中国台湾：综合、新闻、影视、体育、综艺
+  - 国际频道：综合、新闻、影视、体育、音乐、游戏
+- 三种订阅模式：
+  - `Full`：全部频道
+  - `Lite`：仅核心频道（央视 + 卫视 + 港台综合）
+  - `CCTV+卫视`：仅央视和卫视频道
+- 输出两种格式：`.m3u` 与 `.txt`
+- 提供 Flask API：
+  - `/full.m3u`、`/lite.m3u`、`/cctv.m3u`  
+  - `/status`：查看频道数量、源状态  
+  - `/rebuild`：手动重建订阅
+- Docker 化，支持单容器部署，一键运行
+- 配合 OpenWRT 或计划任务，可实现每日自动更新
 
-客户端自动切换，稳定性更高
+---
 
-🧹 失败源自动剔除
+## 文件结构
 
-拉取失败自动计数
+m3u-aggregator/
+├─ config/
+│  └─ m3u-sources.txt   # M3U 源列表 (URL + 区域)
+├─ output/
+│  ├─ iptv_full.m3u
+│  ├─ iptv_lite.m3u
+│  ├─ iptv_cctv_ws.m3u
+│  ├─ fail.db           # 失败源数据库
+│  └─ *.txt             # 对应 TXT 输出
+├─ merge.py             # 核心生成脚本
+├─ docker-compose.yml
+├─ Dockerfile
+└─ README.md
+安装与运行
+1. 克隆仓库
+git clone https://github.com/jikuohong/m3u-aggregator.git
+cd m3u-aggregator
+2. 编辑 M3U 源
+在 config/m3u-sources.txt 中添加你的源，每行格式：
 
-连续 3 次失败的源自动剔除
+<URL> <区域>
+示例：
 
-剔除状态持久化（重启不丢失）
+https://epg.pw/test_channels.m3u 中国大陆
+http://go8.myartsonline.com/zx/0/港澳4Gtv.txt 中国香港
+https://iptv-org.github.io/iptv/countries/tw.m3u 中国台湾
+3. 启动容器
+docker compose up -d
+首次启动会自动生成 .m3u 和 .txt 文件。
 
-保证订阅长期干净稳定
+4. 访问订阅
+Full      : http://<HOST>:50087/full.m3u
+Lite      : http://<HOST>:50087/lite.m3u
+CCTV+卫视 : http://<HOST>:50087/cctv.m3u
+Status    : http://<HOST>:50087/status
+Rebuild   : http://<HOST>:50087/rebuild
+Flask API
+路径	功能
+/full.m3u	获取 Full 订阅
+/lite.m3u	获取 Lite 订阅
+/cctv.m3u	获取 CCTV+卫视 订阅
+/status	查看源状态、频道数量、失败源统计
+/rebuild	手动触发订阅重建
+频道管理
+标准化 CCTV 名称：CCTV1 / CCTV-1 / CCTV1高清 → CCTV-1
 
-🌍 GEO / 版权限制频道清理
+保留特殊：CCTV-5+
 
-自动删除以下频道：
+自动剔除 GEO / 广告频道，包含关键词：
 
-实际访问失败的频道
+geo, block, restricted, 版权, 地区, 区域, 仅限, 海外, 港澳限定, 台灣限定
+失败源管理：连续 5 次失败自动跳过
 
-频道名包含：
+输出说明
+所有输出保存在 output/：
 
-geo
+.m3u：标准 IPTV 订阅
 
-blocked
+.txt：频道名 + URL，对应 .m3u 内容
 
-地区限制
-
-仅限
-
-版权
-
-unavailable
-
-📌 确保 不会出现“刚订阅就大量失效”
-
-📂 自动分组体系
-🇨🇳 中国大陆
-
-📺 央视（CCTV，固定顺序）
-
-🛰️ 卫视
-
-📰 新闻
-
-🏀 体育
-
-🎭 综艺
-
-🎬 影视
-
-🎮 游戏 / 电竞
-
-📍 浙江地方频道
-
-📦 其他（始终排在最后）
-
-CCTV-1 ～ CCTV-15 顺序固定，永不乱序
-
-🇭🇰 中国香港
-
-综合
-
-新闻
-
-影视
-
-体育
-
-综艺
-
-🇹🇼 中国台湾
-
-综合
-
-新闻
-
-影视
-
-体育
-
-综艺
-
-🌍 国际频道
-
-新闻
-
-体育
-
-综合
-
-影视
-
-音乐
-
-📊 排序与体验优化
-
-分组顺序 完全可控
+排序规则：
 
 CCTV 固定顺序
 
-同分组频道名称排序
+其他按照分组 + 字母顺序
 
-不依赖原始源顺序
+中国大陆其他频道放最后
 
-所有客户端显示一致
+定时更新
+可通过 OpenWRT 计划任务 或 Linux cron 每日重启容器，实现每日自动更新。
 
-# 核心逻辑
-- 所有源遍历一次
-- parse_m3u 解析每条频道
-- normalize_name 对 CCTV 做标准化
-- detect_group 分类分组
-- 输出 three playlists
-- /status 显示频道和源数量
+Flask API /rebuild 可随时触发重建
 
-
-🌐 订阅输出
-📡 HTTP 订阅地址
-
-Full 订阅 → http://<HOST_IP>:50087/full.m3u
-
-Lite 订阅 → http://<HOST_IP>:50087/lite.m3u
-
-CCTV+卫视 → http://<HOST_IP>:50087/cctv.m3u
-
-✔ 支持：
-
-TVBox
-
-Kodi
-
-Apple TV（iPlayTV / APTV）
-
-iOS / Android IPTV 客户端
-
-🐳 Docker 部署
-1️⃣ 目录结构
-m3u-aggregator/
-├── Dockerfile
-├── docker-compose.yml
-├── merge.py
-├── config/
-│   ├── sources.txt
-│   └── blacklist.json
-└── output/
-    └── iptv.m3u
-
-2️⃣ docker-compose.yml（示例）
+Docker Compose 示例
+version: "3"
 services:
-  iptv:
-    build: .
-    container_name: iptv-merge
-    network_mode: host
-    restart: unless-stopped
+  m3u-flask:
+    container_name: m3u-flask
+    image: python:3.11-slim
     volumes:
       - ./config:/iptv/config
       - ./output:/iptv/output
+    working_dir: /iptv
+    command: python3 merge.py
+    ports:
+      - "50087:50087"
+注意事项
+确保 M3U 源可以被容器网络访问，海外源可能存在延迟或 GEO 限制。
 
-3️⃣ 启动服务
-# 使用步骤
-1. 编辑 config/m3u-sources.txt
-2. 启动容器
-   docker compose up -d
-3. 访问订阅链接：
-   http://HOST:50087/full.m3u
+merge.py 会自动管理失败源，减少无效请求。
 
+建议在 config/m3u-sources.txt 中避免重复源，以提高效率。
 
+CCTV-5+ 为特殊处理频道，保持不被标准化。
 
+License
+MIT License
 
-📦 订阅源配置
-
-编辑：
-
-config/sources.txt
-
-
-支持：
-
-HTTP / HTTPS
-
-M3U / TXT
-
-🧠 适合人群
-
-想要 长期可用 IPTV 订阅
-
-不想每天修源、换链接
-
-TVBox / Apple TV / 家庭 IPTV 用户
-
-OpenWrt / Docker / NAS 玩家
-
-⚠️ 免责声明
-
-本项目仅用于 学习与技术研究
-
-IPTV 内容版权归原始提供方所有
-
-请在法律允许范围内使用
-
-⭐ 推荐
+⚡ 本项目仅用于个人 IPTV 订阅整理学习使用，请勿用于商业分发。
 
 如果你觉得这个项目对你有帮助：
 
